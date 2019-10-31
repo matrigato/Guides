@@ -30,13 +30,13 @@ Download the Arch ISO from the [Arch Linux official website](https://www.archlin
 
 ### 2. Create a live USB
 
-*Note: If you are installing Arch Linux on a VM, skip this step and boot directly into the ISO image.*
+_Note: If you are installing Arch Linux on a VM, skip this step and boot directly into the ISO image._
 
 #### In Linux
 
-If you are on Linux, you can use dd command to create a live USB. Replace `/path/to/archlinux.iso` with the path where you have downloaded the ISO file, and replacing `/dev/sdx` with your drive, e.g. `/dev/sdb`. (Do not append a partition number, so do not use something like `/dev/sdb1`) in the example below. You can get your drive information using `lsblk` or `fdisk -l` command.
+If you are on Linux, you can use dd command to create a live USB. Replace `/path/to/archlinux.iso` with the path where you have downloaded the ISO file, and replacing `/dev/sdx` with your drive, e.g. `/dev/sdb` (Do not append a partition number, so do not use something like `/dev/sdb1`) in the example below. You can get your drive information using `lsblk` or `fdisk -l` command.
 
-**Warning:** This will destroy all data on `/dev/sdx`. If you accidentally indicate your HD, you may be in trouble.
+_**Warning:** This will destroy all data on `/dev/sdx`. If you accidentally indicate your HD, you may be in trouble._
 
 ```
 dd bs=4M if=/path/to/archlinux.iso of=/dev/sdx status=progress && sync
@@ -52,13 +52,78 @@ Shut down your PC, insert your USB and boot your system. To enter a boot menu, k
 
 Once you boot from your live USB, select Boot Arch Linux (x86_64). After some checks, you should be logged with the root user. If something went wrong and it asks you for your login, just type `root`.
 
-### 4. Set the Keyboard Layout
+### 4. Preparing to install
+
+#### Set the Keyboard Layout
 
 The default console keymap is US. Available layouts can be listed with:
 
 ```
 ls /usr/share/kbd/keymaps/**/*.map.gz
 ```
+
+To modify the layout, append a corresponding file name to `loadkeys`, omitting path and file extension. For example, to set a [German](https://en.wikipedia.org/wiki/File:KB_Germany.svg) keyboard layout:
+
 ```
-# ls /usr/share/kbd/keymaps/**/*.map.gz
+loadkeys de-latin1
 ```
+
+Console fonts are located in `/usr/share/kbd/consolefonts/` and can likewise be set with `setfont`.
+
+#### Verify the boot mode
+
+If UEFI mode is enabled on an UEFI motherboard, Archiso will boot Arch Linux accordingly via systemd-boot. To verify this, list the efivars directory:
+
+```
+ls /sys/firmware/efi/efivars
+```
+
+If the directory does not exist, the system may be booted in BIOS mode. If it exists, the system is in UEFI mode. Remember which mode your system is in.
+
+#### Connect to the internet
+
+For future reference, it is possible to list network interfaces with:
+
+```
+ip link
+```
+
+The first letters in an interface's name represent its function: `en` for wired/Ethernet, `wl` for wireless/WLAN. `lo` is the loop device and is not used in making network connections.
+
+If you are using a wired connection, you should already be connected to the Internet. The installation image enables dhcpcd (for Dynamic IP address) for wired network devices on boot.
+
+If you are using a wireless connection, running `wifi-menu` and configuring the connection should be enough for now. If your network isn't listed, try closing and opening `wifi-menu` until it appears. Keep in mind that this is only temporary, we will install NetworkManager in the actual system later.
+
+You can check your internet connection by using the ping command:
+
+```
+ping -c5 google.com
+```
+
+It may need some seconds to connect if you use it immediately after setting up the connection, so it doesn't always work on the first try.
+
+#### Update the system clock
+
+Use `timedatectl` to ensure the system clock is accurate:
+
+```
+timedatectl set-ntp true
+```
+
+To check the service status, use `timedatectl status`.
+
+### 5. Partition the disks
+
+When recognized by the live system, disks are assigned to a block device such as `/dev/sda` or `/dev/nvme0n1`. To identify these devices, use `lsblk` or `fdisk -l`. Results ending in `rom`, `loop` or `airoot` may be ignored.
+
+```
+fdisk -l
+```
+_Note: This guide will assume that /dev/sda is the disk you wish to partition. Change it if you are using another._
+
+The following partitions are **required** for a chosen device:
+
+* One partition for the root directory `/`.
+* If UEFI is enabled, an EFI system partition.
+
+This guide won't cover separating `/` into optional partitions like `/home`, but will cover the creation of a swap partition (acts like extra RAM on disk, but is slower than the main RAM).
