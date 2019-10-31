@@ -119,7 +119,7 @@ When recognized by the live system, disks are assigned to a block device such as
 ```
 fdisk -l
 ```
-_Note: This guide will assume that /dev/sda is the disk you wish to partition. Change it if you are using another._
+_Note: This guide will assume that `/dev/sda` is the disk you wish to partition. Change it if you are using another._
 
 The following partitions are **required** for a chosen device:
 
