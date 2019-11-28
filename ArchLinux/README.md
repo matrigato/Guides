@@ -1,5 +1,7 @@
 ## Arch Linux installation guide
 
+_**IMPORTANT:** This is what worked for me. It should be enough in most cases, but there is no guarantee this will work for you. I wrote this guide mostly to myself. Follow at your own risk._
+
 ### Intro
 
 Arch Linux is one of the most popular minimalist Linux distributions. It is versatile and bleeding edge, focusing on simplicity, with a default installation that covers only a minimal base system and expects the end user to configure and use it. This makes it popular among DIY enthusiasts and hardcore Linux users.
@@ -54,7 +56,7 @@ Once you boot from your live USB, select Boot Arch Linux (x86_64). After some ch
 
 ### 4. Preparing to install
 
-#### Set the Keyboard Layout
+#### 4.1. Set the Keyboard Layout
 
 The default console keymap is US. Available layouts can be listed with:
 
@@ -70,7 +72,7 @@ loadkeys de-latin1
 
 Console fonts are located in `/usr/share/kbd/consolefonts/` and can likewise be set with `setfont`.
 
-#### Verify the boot mode
+#### 4.2. Verify the boot mode
 
 If UEFI mode is enabled on an UEFI motherboard, Archiso will boot Arch Linux accordingly via systemd-boot. To verify this, list the efivars directory:
 
@@ -80,7 +82,7 @@ ls /sys/firmware/efi/efivars
 
 If the directory does not exist, the system may be booted in BIOS mode. If it exists, the system is in UEFI mode. Remember which mode your system is in.
 
-#### Connect to the internet
+#### 4.3. Connect to the internet
 
 For future reference, it is possible to list network interfaces with:
 
@@ -102,7 +104,7 @@ ping -c5 google.com
 
 It may need some seconds to connect if you use it immediately after setting up the connection, so it doesn't always work on the first try.
 
-#### Update the system clock
+#### 4.4. Update the system clock
 
 Use `timedatectl` to ensure the system clock is accurate:
 
@@ -112,18 +114,97 @@ timedatectl set-ntp true
 
 To check the service status, use `timedatectl status`.
 
-### 5. Partition the disks
+### 5. Partition the disks, create and mount the file systems
 
 When recognized by the live system, disks are assigned to a block device such as `/dev/sda` or `/dev/nvme0n1`. To identify these devices, use `lsblk` or `fdisk -l`. Results ending in `rom`, `loop` or `airoot` may be ignored.
 
 ```
 fdisk -l
 ```
-_Note: This guide will assume that `/dev/sda` is the disk you wish to partition. Change it if you are using another._
+_Note: This guide will assume that `/dev/sda` is the disk you wish to partition. Important to note is that the name convention for Raspberry PI drive storage usually is `/dev/mmcblk0` and for some types of hardware RAID cards can be `/dev/cciss`. Change it if you are using another._
 
 The following partitions are **required** for a chosen device:
 
 * One partition for the root directory `/`.
 * If UEFI is enabled, an EFI system partition.
 
-This guide won't cover separating `/` into optional partitions like `/home`, but will cover the creation of a swap partition (acts like extra RAM on disk, but is slower than the main RAM).
+This guide won't cover separating `/` into optional partitions like `/home`, but will cover the creation of a swap partition (acts like extra RAM on disk, but is slower than the main RAM, useful to avoid running out of memory). If you don't know what size your swap partition should be, [It's FOSS has some useful suggestions](https://itsfoss.com/swap-size/).
+
+Run the following command:
+
+```
+cfdisk /dev/sda
+```
+
+In `cfdisk` use the arrow keys to navigate and the enter key to select. Now follow the instructions for your boot mode:
+
+#### BIOS
+
+In BIOS mode, if you are greeted by a screen asking you to select the label type, in most cases you should choose `dos`. If this doesn't happen, the device already has a partition table.
+
+In the new screen, the partitions are listed. In a new system, you should only have "Free space". If this is not a new system and you want to overwrite older partitions, remember to `Delete` them.
+
+Now we will create the partitions. Let's start with the root partition, your main one. Select `New`. You will be prompted to enter the partition size. Be sure to leave enough room to create another partition for your swap space by subtracting it from the total.
+
+Next, you will be asked if the partition should be primary or extended. Select `primary`. Now make the partition bootable by selecting `Bootable`. For this guide, I'll assume this partition is `/dev/sda1`.
+
+Now, let's create the swap partition. Do almost the same thing as before: Select "Free space", `New`, use the remainder of the space on the drive, `primary`. However, you shouldn't make this partition bootable. This one has an extra step: The partition type needs to be changed from `83 Linux` to `82 Linux swap / Solaris`. Select `Type` on the swap partition and select `82 Linux swap / Solaris`. I'll assume this partition is `/dev/sda2`.
+
+Write the changes to the drive by selecting `Write` and typing `yes`. Now exit by selecting `Quit`.
+
+Now we can create the file system for the root partition, `/dev/sda1`. Here we will use the `ext4` file system:
+
+```
+mkfs.ext4 /dev/sda1
+```
+
+We should also initialize and mount the swap:
+
+```
+mkswap /dev/sda2
+swapon /dev/sda2
+```
+
+Now mount the file system on the root partition to `/mnt`:
+
+```
+mount /dev/sda1 /mnt
+```
+
+#### UEFI
+
+In UEFI mode, if you are greeted by a screen asking you to select the label type, in most cases you should choose `gpt`. If this doesn't happen, the device already has a partition table.
+
+In the new screen, the partitions are listed. In a new system, you should only have "Free space". If this is not a new system and you want to overwrite older partitions, remember to `Delete` them.
+
+Now we will create the partitions. First, select `New`. You will be prompted to enter the partition size. Type 512M and press enter. Select `Type` from the bottom menu and choose `EFI System` partition type. I'll assume this EFI System partition is `/dev/sda1`.
+
+Now, let's create the swap partition. Do almost the same thing as before: Select "Free space", `New`, type desired swap size, select `Type` and choose `Linux swap`. I'll assume this swap partition is `/dev/sda2`.
+
+Finally, the root partition, your main one. Select `New` -> Size: rest of free space -> `Type` as `Linux filesystem`. I'll assume this partition is `/dev/sda3`.
+
+Write the changes to the drive by selecting `Write` and typing `yes`. Now exit by selecting `Quit`.
+
+Now we can create the file system for the EFI system and root partitions. You should create a `FAT32` file system for `/dev/sda1` (EFI) and an `ext4` one for `/dev/sda3` (root).
+
+```
+mkfs.fat -F32 /dev/sda1
+mkfs.ext4 /dev/sda3
+```
+
+We should also initialize and mount the swap:
+
+```
+mkswap /dev/sda2
+swapon /dev/sda2
+```
+
+Now mount the file system on the root partition to `/mnt`:
+
+```
+mount /dev/sda3 /mnt
+```
+
+### 6. Install Arch Linux
+
+As a last step before installation, you may want to edit `/etc/pacman.d/mirrorlist` and move the mirrors closest to you to the top of the list, usually the ones from your country. Mirrors on top are given priority, and one close to you can speed up package downloads. This file will be copied to the new system by `pacstrap`, so it is worth getting right.
