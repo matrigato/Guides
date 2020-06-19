@@ -1,6 +1,6 @@
 ## Arch Linux installation guide
 
-_**IMPORTANT:** This is what worked for me. It should be enough in most cases, but there is no guarantee this will work for you. I wrote this guide mostly to myself. Follow at your own risk._
+_**IMPORTANT:** This is what worked for me. It should be enough in most cases, but there is no guarantee this will work for you. I wrote this guide mostly to myself. Most of it is taken directly from the [Arch Wiki](https://wiki.archlinux.org/index.php/Installation_Guide), with some modifications to fix some issues I had faced in previous installations and to make the whole process easier. The Wiki is still the best source of information on the subject and this guide is not meant to replace it. Follow at your own risk._
 
 ### Intro
 
@@ -12,7 +12,7 @@ Also, its one of the most popular OS for learning Linux from scratch. If you lik
 
 In this guide, we will be installing a basic Arch Linux system using the full disk to a computer or virtual machine.
 
-## Installing Arch Linux
+## Pre-installation
 
 ### Prerequisites
 
@@ -36,9 +36,23 @@ _Note: If you are installing Arch Linux on a VM, skip this step and boot directl
 
 #### In Linux
 
-If you are on Linux, you can use dd command to create a live USB. Replace `/path/to/archlinux.iso` with the path where you have downloaded the ISO file, and replacing `/dev/sdx` with your drive, e.g. `/dev/sdb` (Do not append a partition number, so do not use something like `/dev/sdb1`) in the example below. You can get your drive information using `lsblk` or `fdisk -l` command.
+If you are on Linux, you can use any of the following commands to create a live USB. Replace `/path/to/archlinux.iso` with the path where you have downloaded the ISO file, and replacing `/dev/sdx` with your drive, e.g. `/dev/sdb` (Do not append a partition number, so do not use something like `/dev/sdb1`) in the example below. You can get your drive information using `lsblk` or `fdisk -l` command. When running `lsblk`, also make sure the drive isn't mounted, and unmount it if necessary.
 
 _**Warning:** This will destroy all data on `/dev/sdx`. If you accidentally indicate your HD, you may be in trouble._
+
+* using `cat`:
+
+```
+cat path/to/archlinux.iso > /dev/sdx
+```
+
+* using `cp`:
+
+```
+cp path/to/archlinux.iso /dev/sdx
+```
+
+* using `dd`:
 
 ```
 dd bs=4M if=/path/to/archlinux.iso of=/dev/sdx status=progress && sync
@@ -74,7 +88,7 @@ Console fonts are located in `/usr/share/kbd/consolefonts/` and can likewise be 
 
 #### 4.2. Verify the boot mode
 
-If UEFI mode is enabled on an UEFI motherboard, Archiso will boot Arch Linux accordingly via systemd-boot. To verify this, list the efivars directory:
+If UEFI mode is enabled on an UEFI motherboard (most modern ones), Archiso will boot Arch Linux accordingly via systemd-boot. To verify this, list the efivars directory:
 
 ```
 ls /sys/firmware/efi/efivars
@@ -138,6 +152,45 @@ cfdisk /dev/sda
 
 In `cfdisk` use the arrow keys to navigate and the enter key to select. Now follow the instructions for your boot mode:
 
+#### UEFI
+
+In UEFI mode, if you are greeted by a screen asking you to select the label type, in most cases you should choose `gpt`. If this doesn't happen, the device already has a partition table.
+
+In the new screen, the partitions are listed. In a new system, you should only have "Free space". If this is not a new system and you want to overwrite older partitions, remember to `Delete` them.
+
+Now we will create the partitions. First, select `New`. You will be prompted to enter the partition size. Type 512M and press enter. Select `Type` from the bottom menu and choose `EFI System` partition type. I'll assume this EFI System partition is `/dev/sda1`.
+
+Now, let's create the swap partition. Do almost the same thing as before: Select "Free space", `New`, type desired swap size, select `Type` and choose `Linux swap`. I'll assume this swap partition is `/dev/sda2`.
+
+Finally, the root partition, your main one. Select `New` -> Size: rest of free space -> `Type` as `Linux filesystem`. I'll assume this partition is `/dev/sda3`.
+
+Write the changes to the drive by selecting `Write` and typing `yes`. Now exit by selecting `Quit`.
+
+Now we can create the file system for the EFI system and root partitions. You should create a `FAT32` file system for `/dev/sda1` (EFI) and an `ext4` one for `/dev/sda3` (root).
+
+```
+mkfs.fat -F32 /dev/sda1
+mkfs.ext4 /dev/sda3
+```
+
+We should also initialize and mount the swap:
+
+```
+mkswap /dev/sda2
+swapon /dev/sda2
+```
+
+Now mount the file system on the root partition to `/mnt`:
+
+```
+mount /dev/sda3 /mnt
+mkdir /mnt/boot
+mkdir /mnt/boot/efi
+mount /dev/sda1 /mnt/boot/efi
+```
+
+If you are using a more complex partitioning scheme, create any remaining mount points (such as /mnt/home) with `mkdir` and mount their corresponding partitions. `genfstab` will later detect mounted file systems and swap space.
+
 #### BIOS
 
 In BIOS mode, if you are greeted by a screen asking you to select the label type, in most cases you should choose `dos`. If this doesn't happen, the device already has a partition table.
@@ -171,40 +224,196 @@ Now mount the file system on the root partition to `/mnt`:
 mount /dev/sda1 /mnt
 ```
 
-#### UEFI
+If you are using a more complex partitioning scheme, create any remaining mount points (such as /mnt/home) with `mkdir` and mount their corresponding partitions. `genfstab` will later detect mounted file systems and swap space.
 
-In UEFI mode, if you are greeted by a screen asking you to select the label type, in most cases you should choose `gpt`. If this doesn't happen, the device already has a partition table.
-
-In the new screen, the partitions are listed. In a new system, you should only have "Free space". If this is not a new system and you want to overwrite older partitions, remember to `Delete` them.
-
-Now we will create the partitions. First, select `New`. You will be prompted to enter the partition size. Type 512M and press enter. Select `Type` from the bottom menu and choose `EFI System` partition type. I'll assume this EFI System partition is `/dev/sda1`.
-
-Now, let's create the swap partition. Do almost the same thing as before: Select "Free space", `New`, type desired swap size, select `Type` and choose `Linux swap`. I'll assume this swap partition is `/dev/sda2`.
-
-Finally, the root partition, your main one. Select `New` -> Size: rest of free space -> `Type` as `Linux filesystem`. I'll assume this partition is `/dev/sda3`.
-
-Write the changes to the drive by selecting `Write` and typing `yes`. Now exit by selecting `Quit`.
-
-Now we can create the file system for the EFI system and root partitions. You should create a `FAT32` file system for `/dev/sda1` (EFI) and an `ext4` one for `/dev/sda3` (root).
-
-```
-mkfs.fat -F32 /dev/sda1
-mkfs.ext4 /dev/sda3
-```
-
-We should also initialize and mount the swap:
-
-```
-mkswap /dev/sda2
-swapon /dev/sda2
-```
-
-Now mount the file system on the root partition to `/mnt`:
-
-```
-mount /dev/sda3 /mnt
-```
-
-### 6. Install Arch Linux
+## Installation
 
 As a last step before installation, you may want to edit `/etc/pacman.d/mirrorlist` and move the mirrors closest to you to the top of the list, usually the ones from your country. Mirrors on top are given priority, and one close to you can speed up package downloads. This file will be copied to the new system by `pacstrap`, so it is worth getting right.
+
+Now, read this whole section before doing it. The basic install uses the `pacstrap` script to install the `base` package, Linux kernel and firmware for common hardware:
+
+```
+pacstrap /mnt base linux linux-firmware
+```
+
+However, the `base` package does not include all tools from the live installation, so installing other packages may be necessary for a fully functional base system. In particular, consider installing:
+
+* userspace utilities for the management of file systems that will be used on the system,
+* utilities for accessing RAID or LVM partitions,
+* specific firmware for other devices not included in `linux-firmware`,
+* software necessary for networking: `dhcpcd` for DHCP, `networkmanager` for WiFi, etc.,
+* a text editor,
+* packages for accessing documentation in man and info pages: `man-db`, `man-pages` and `texinfo`.
+
+To install other packages or package groups, append the names to the `pacstrap` command above (space separated) or use `pacman` while chrooted into the new system. For comparison, packages available in the live system can be found in [packages.x86_64](https://gitlab.archlinux.org/archlinux/archiso/-/blob/master/configs/releng/packages.x86_64).
+
+My personal recommendation (if using ethernet) is:
+
+```
+pacstrap /mnt base base-devel linux linux-firmware man-db man-pages vim nano dhcpcd
+```
+
+I would also add `networkmanager` if I needed WiFi (I think you wound't need `dhcpcd` then, but I'm not sure). Of course, you won't need `base-devel` if you don't need tools for building (compiling and linking), or `dhcpcd` if you are using a static IP intead of DHCP. These are just my recommendations, install whatever you want. If you mess something up now, like not installing `dhcpcd` when you needed it and end up without internet connection after finishing the installation, you can boot though the installation USB again, mount the root partition, chroot into it and install the needed packages through `pacman`.
+
+## Configure the system
+
+### Fstab
+
+Generate an fstab file (use `-U` or `-L` to define by UUID or labels, respectively):
+
+```
+genfstab -U /mnt >> /mnt/etc/fstab
+```
+
+Check the resulting `/mnt/etc/fstab` file, and edit it in case of errors.
+
+### Chroot
+
+Change root into the new system:
+
+```
+arch-chroot /mnt
+```
+
+### Time zone
+
+Set the time zone. Replace `Region` and `City` with the corresponding ones found by autocomplete (pressing TAB):
+
+```
+ln -sf /usr/share/zoneinfo/Region/City /etc/localtime
+```
+
+Don't worry about it not being already updated when running `timedatectl status`, this should take effect after rebooting.
+
+Run `hwclock` to generate `/etc/adjtime`:
+
+```
+hwclock --systohc
+```
+
+This command assumes the hardware clock is set to UTC, which I guess may cause issues when dual-booting with Windows. Maybe setting ntp (covered by the guide later) should be enough to fix it.
+
+### Localization
+
+Edit `/etc/locale.gen` and uncomment `en_US.UTF-8 UTF-8` and other needed locales. Generate the locales by running:
+
+```
+locale-gen
+```
+
+Create the `locale.conf` file, and set the `LANG` variable accordingly (assuming English US, change as needed):
+
+```
+echo LANG=en_US.UTF-8 > /etc/locale.conf
+export LANG=en_US.UTF-8
+```
+
+If you set the keyboard layout, make the changes persistent in `vconsole.conf` (German keyboard example):
+
+```
+echo KEYMAP=de-latin1 > /etc/vconsole.conf
+```
+
+Both locale and timezone settings can be changed later, when you are using your Arch Linux system.
+
+### Network configuration
+
+Create the hostname file with the desired name for your computer in the network. Replace `myhostname` with the name you chose:
+
+```
+echo myhostname > /etc/hostname
+```
+
+Add matching entries to hosts (run `nano /etc/hosts`):
+
+```
+127.0.0.1	localhost
+::1		localhost
+127.0.1.1	myhostname.localdomain	myhostname
+```
+
+If the system has a permanent IP address, it should be used instead of 127.0.1.1.
+
+Complete the network configuration for the newly installed environment, that includes installing your preferred network management software.
+
+### Root password
+
+Create a root password:
+
+```
+passwd
+```
+
+### Boot loader
+
+You can probably skip this if you are configuring a dual boot in a system that already has rEFInd installed, "it just werks". If that's not the case, this will show you how to install GRUB.
+
+This is on of the most important steps and is needed to actually be able to boot the system. If you forgot to do it for some reason, there is still hope, you just need to chroot into the root partition after mounting it with the installation USB. The steps are different for BIOS and UEFI:
+
+#### UEFI
+
+Make sure that you are still using arch-chroot. Install required packages:
+
+```
+pacman -S grub efibootmgr
+```
+
+Install grub:
+
+```
+grub-install --target=x86_64-efi --bootloader-id=GRUB --efi-directory=/boot/efi
+grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+#### BIOS
+
+Install grub package:
+
+```
+pacman -S grub
+```
+
+Install grub, make sure you use your disk name if it isn't `/dev/sda` (don’t put the disk number `sda1`, just the disk name `sda`):
+
+```
+grub-install /dev/sda
+grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+## Reboot
+Exit the chroot environment by typing `exit` or pressing `Ctrl+d`.
+
+Optionally manually unmount all the partitions with `umount -R /mnt`: this allows noticing any "busy" partitions, and finding the cause with `fuser`.
+
+Finally, shutdown the machine by typing `shutdown now` or `poweroff`: any partitions still mounted will be automatically unmounted by systemd. Remember to remove the installation media, turn on the computer and then login into the new system with the root account.
+
+## Post-installation
+
+The first thing to do in your new system is to test the internet connection:
+
+```
+ping -c5 google.com
+```
+
+If it fails because you need to enable DHCP, run this:
+
+```
+systemctl start dhcpcd
+systemctl enable dhcpcd
+```
+
+If you need to use WiFi, enable `networkmanager` and configure it through `nmtui`:
+
+```
+systemctl start NetworkManager.service
+systemctl enable NetworkManager.service
+nmtui
+```
+
+Also remember to enable ntp:
+
+```
+timedatectl set-ntp true
+```
+
+(TODO: create user, manage sudo, GUI, etc.)
