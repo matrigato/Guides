@@ -346,7 +346,7 @@ passwd
 
 ### Boot loader
 
-You can probably skip this if you are configuring a dual boot in a system that already has rEFInd installed, "it just werks". If that's not the case, this will show you how to install GRUB.
+You can probably skip this if you are configuring a dual boot in a system that already has rEFInd installed, It Just Works&trade;. If that's not the case, this will show you how to install GRUB.
 
 This is one of the most important steps and is needed to actually be able to boot the system. If you forgot to do it for some reason, there is still hope, you just need to chroot into the root partition after mounting it with the installation USB. The steps are different for BIOS and UEFI:
 
